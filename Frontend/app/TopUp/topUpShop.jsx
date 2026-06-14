@@ -60,6 +60,7 @@ export default function TopUpShop() {
   const [error, setError] = useState(null);
   const [purchasingItemId, setPurchasingItemId] = useState(null);
   const purchaseInFlight = useRef(false);
+  const [isIAPConnected, setIsIAPConnected] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(
     typeof params.category === 'string' && params.category && params.category !== 'all'
       ? params.category
@@ -111,6 +112,7 @@ export default function TopUpShop() {
       try {
         await IAP.initConnection();
         console.log('[TopUpShop] IAP Connection initialized successfully.');
+        setIsIAPConnected(true);
 
         if (Platform.OS === 'android') {
           await IAP.flushFailedPurchasesCachedAsPendingAndroid();
@@ -119,9 +121,11 @@ export default function TopUpShop() {
         // Listen for successful transactions
         purchaseUpdateSubscription = IAP.purchaseUpdatedListener(async (purchase) => {
           console.log('[TopUpShop] Purchase updated:', purchase);
-          const receipt = purchase.transactionReceipt;
-          if (receipt) {
-            try {
+          try {
+            if (!purchase) return;
+
+            const receipt = purchase.transactionReceipt;
+            if (receipt) {
               const token = purchase.purchaseToken || purchase.transactionId;
 
               // Verify the purchase with our secure backend verification endpoint
@@ -136,24 +140,31 @@ export default function TopUpShop() {
                 'Purchase Successful',
                 result?.message || 'Your purchase was completed successfully.',
               );
-            } catch (err) {
-              console.error('[TopUpShop] Verification or completion failed:', err);
-              showAlert('Verification Failed', err?.message || 'We could not verify your purchase. Please contact support.');
-            } finally {
-              purchaseInFlight.current = false;
-              setPurchasingItemId(null);
+            } else {
+              console.log('[TopUpShop] Purchase updated but missing transactionReceipt:', purchase);
             }
+          } catch (err) {
+            console.error('[TopUpShop] Verification or completion failed:', err);
+            showAlert('Verification Failed', err?.message || 'We could not verify your purchase. Please contact support.');
+          } finally {
+            purchaseInFlight.current = false;
+            setPurchasingItemId(null);
           }
         });
 
         // Listen for transaction errors (e.g. user cancelled)
         purchaseErrorSubscription = IAP.purchaseErrorListener((error) => {
           console.warn('[TopUpShop] Purchase error:', error);
-          if (error?.code !== 'E_USER_CANCELLED') {
-            showAlert('Purchase Failed', error?.message || 'Something went wrong with the purchase.');
+          try {
+            if (error?.code !== 'E_USER_CANCELLED') {
+              showAlert('Purchase Failed', error?.message || 'Something went wrong with the purchase.');
+            }
+          } catch (err) {
+            console.error('[TopUpShop] Error in purchaseErrorListener:', err);
+          } finally {
+            purchaseInFlight.current = false;
+            setPurchasingItemId(null);
           }
-          purchaseInFlight.current = false;
-          setPurchasingItemId(null);
         });
 
       } catch (err) {
@@ -167,8 +178,29 @@ export default function TopUpShop() {
       if (purchaseUpdateSubscription) purchaseUpdateSubscription.remove();
       if (purchaseErrorSubscription) purchaseErrorSubscription.remove();
       IAP.endConnection();
+      setIsIAPConnected(false);
     };
   }, [showAlert]);
+
+  // Fetch product definitions from store once IAP connection is established and catalog is loaded
+  useEffect(() => {
+    if (isExpoGo || !isIAPConnected || !catalog.length) return;
+
+    const fetchIAPProducts = async () => {
+      try {
+        const skus = catalog.map(item => item.google_product_id || item.item_id).filter(Boolean);
+        if (skus.length > 0) {
+          console.log('[TopUpShop] Fetching products from store for SKUs:', skus);
+          const products = await IAP.getProducts({ skus });
+          console.log('[TopUpShop] Successfully fetched products from store:', products);
+        }
+      } catch (err) {
+        console.error('[TopUpShop] Failed to fetch products from store:', err);
+      }
+    };
+
+    fetchIAPProducts();
+  }, [catalog, isIAPConnected]);
 
   const loadCatalog = useCallback(async () => {
     try {
@@ -211,7 +243,7 @@ export default function TopUpShop() {
 
               try {
                 const purchaseToken = generateMockToken();
-                const result = await topUpShopService.verifyPurchase(item.item_id, purchaseToken);
+                const result = await topUpShopService.verifyPurchase(item.google_product_id || item.item_id, purchaseToken);
                 showAlert(
                   'Purchase Successful',
                   result?.message || 'Your purchase was completed successfully.',
@@ -232,11 +264,19 @@ export default function TopUpShop() {
       setPurchasingItemId(item.item_id);
 
       try {
-        console.log(`[TopUpShop] Requesting native purchase for SKU: ${item.item_id}`);
+        console.log(`[TopUpShop] Requesting native purchase for SKU: ${item.google_product_id || item.item_id}`);
         // requestPurchase triggers the official Google Play Billing Bottom Sheet
         await IAP.requestPurchase({
-          skus: [item.item_id],
-          andDangerouslyFinishTransactionAutomaticallyIOS: false,
+          request: {
+            google: {
+              skus: [item.google_product_id || item.item_id],
+            },
+            apple: {
+              sku: item.apple_product_id || item.google_product_id || item.item_id,
+              andDangerouslyFinishTransactionAutomatically: false,
+            },
+          },
+          type: 'in-app',
         });
         // The purchaseUpdatedListener will handle backend verification & finishTransaction
       } catch (err) {
