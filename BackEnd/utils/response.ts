@@ -4,7 +4,7 @@ export const successResponse = <T>(
   res: Response,
   data: T,
   message = "Success",
-  status = 200
+  status = 200,
 ) => {
   return res.status(status).json({
     success: true,
@@ -17,12 +17,14 @@ export const errorResponse = (
   res: Response,
   error: unknown,
   message = "An error occurred",
-  status = 500
+  status = 500,
+  data?: any,
 ) => {
   return res.status(status).json({
     success: false,
     message,
     error: error instanceof Error ? error.message : error,
+    ...data,
   });
 };
 
@@ -30,7 +32,7 @@ export const successShopResponse = <T>(
   res: Response,
   data: T,
   message = "Success",
-  status = 200
+  status = 200,
 ) => {
   const responseData = {
     message,
@@ -47,7 +49,7 @@ export const errorShopResponse = (
   res: Response,
   errorDetails: unknown,
   message = "An error occurred",
-  status = 500
+  status = 500,
 ) => {
   const responseData: { message: string; error?: string } = { message };
   if (errorDetails) {
