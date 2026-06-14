@@ -52,7 +52,7 @@ export const assignBalancedQuests = async (
   expiresAt: Date,
 ) => {
   const allBaseQuests = await prisma.quest.findMany({
-    where: { quest_period: period, is_active: true },
+    where: { quest_period: period },
   });
 
   if (allBaseQuests.length === 0) return;
