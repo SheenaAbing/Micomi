@@ -9,5 +9,6 @@
     "skipLibCheck": true,
     "outDir": "./dist"
   },
-  "include": ["src/**/*", "types", "types/express.d.ts"]
+  "include": ["src/**/*", "helper/**/*", "middleware/**/*", "types/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

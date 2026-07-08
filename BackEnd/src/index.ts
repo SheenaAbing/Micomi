@@ -23,7 +23,7 @@ import lessonRoutes from "./models/Lesson/lesson.routes";
 import questRoutes from "./models/Quest/quest.routes";
 import dialogueRoutes from "./models/Dialogue/dialogue.routes";
 import authRoutes from "../middleware/auth.routes";
-import { getAllPlayerProgress } from "../src/models/Player/playerProgress.service";
+import { getAllPlayerProgress } from "./models/Player/playerProgress.service";
 import avatarRoutes from "./models/Avatar/avatar.routes";
 import moduleRoutes from "./models/Module/module.routes";
 import socialRoutes from "./models/Social/social.routes";
